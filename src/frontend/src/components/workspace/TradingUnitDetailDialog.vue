@@ -1,254 +1,32 @@
 <template>
-  <el-dialog
+  <SharedTradingUnitDetailDialog
     :model-value="visible"
+    mode="snapshot"
     :title="t('tradingUnits.unitDetail')"
-    width="980px"
-    @update:model-value="(v: boolean) => emit('update:visible', v)"
-  >
-    <div
-      v-if="detailUnit"
-      class="space-y-4 text-sm"
-    >
-      <div class="flex flex-wrap items-center justify-end gap-2">
-        <el-button
-          size="small"
-          @click="emit('openRuntimeDialog', detailUnit)"
-        >
-          {{ t('tradingUnits.viewRunFile') }}
-        </el-button>
-        <el-button
-          type="primary"
-          size="small"
-          @click="emit('openRuntimeDirectory', detailUnit)"
-        >
-          {{ t('tradingUnits.openUnit') }}
-        </el-button>
-      </div>
-
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('tradingUnits.unit') }}
-          </div>
-          <div class="mt-1 font-semibold text-slate-700">
-            {{ detailUnit.strategy_name || detailUnit.strategy_id }}
-          </div>
-          <div class="text-xs text-slate-400">
-            {{ detailUnit.symbol }} / {{ detailUnit.timeframe }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('tradingUnits.tradingMode') }}
-          </div>
-          <div class="mt-1 font-semibold text-slate-700">
-            {{ detailUnit.trading_mode === 'live' ? t('tradingUnits.liveTrading') : t('tradingUnits.paperTrading') }}
-          </div>
-          <div class="text-xs text-slate-400">
-            {{ statusLabel(detailUnit) }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('tradingUnits.gateway') }}
-          </div>
-          <div class="mt-1 font-semibold text-slate-700">
-            {{ detailUnit.trading_snapshot?.gateway_summary || '-' }}
-          </div>
-          <div class="text-xs text-slate-400">
-            {{ t('tradingUnits.instance') }} {{ detailUnit.trading_instance_id || '-' }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('tradingUnits.lastUpdate') }}
-          </div>
-          <div class="mt-1 font-semibold text-slate-700">
-            {{ detailUnit.trading_snapshot?.updated_at || formatTime(detailUnit.updated_at) }}
-          </div>
-          <div class="text-xs text-slate-400">
-            {{ t('tradingUnits.tradingDay') }} {{ detailUnit.trading_snapshot?.trading_day || '-' }}
-          </div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('tradingUnits.longPosition') }} / {{ t('tradingUnits.flat') }}
-          </div>
-          <div class="mt-1 text-lg font-semibold text-slate-700">
-            {{ formatQuantity(detailUnit.trading_snapshot?.long_position) }}
-            /
-            {{ formatQuantity(detailUnit.trading_snapshot?.short_position) }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('tradingUnits.todayPnL') }}
-          </div>
-          <div
-            class="mt-1 text-lg font-semibold"
-            :class="numberClass(detailUnit.trading_snapshot?.today_pnl)"
-          >
-            {{ formatSignedNumber(detailUnit.trading_snapshot?.today_pnl, 2, false) }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('tradingUnits.cumulativePnL') }}
-          </div>
-          <div
-            class="mt-1 text-lg font-semibold"
-            :class="numberClass(detailUnit.trading_snapshot?.cumulative_pnl)"
-          >
-            {{ formatSignedNumber(detailUnit.trading_snapshot?.cumulative_pnl, 2, false) }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('tradingUnits.leverage') }} / {{ t('tradingUnits.latestPrice') }}
-          </div>
-          <div class="mt-1 text-lg font-semibold text-slate-700">
-            {{ formatNumber(detailUnit.trading_snapshot?.leverage, 2, false) }}
-            /
-            {{ formatPrice(detailUnit.trading_snapshot?.latest_price) }}
-          </div>
-        </div>
-      </div>
-
-      <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
-        <div class="mb-3 text-sm font-medium text-slate-700">
-          {{ t('tradingUnits.runInfo') }}
-        </div>
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div><span class="text-gray-500">{{ t('tradingUnits.runStarted') }}：</span>{{ detailUnit.trading_snapshot?.started_at || '-' }}</div>
-          <div><span class="text-gray-500">{{ t('tradingUnits.runStopped') }}：</span>{{ detailUnit.trading_snapshot?.stopped_at || '-' }}</div>
-          <div class="md:col-span-2">
-            <span class="text-gray-500">{{ t('tradingUnits.errorInfo') }}：</span>{{ detailUnit.trading_snapshot?.error || '-' }}
-          </div>
-        </div>
-      </div>
-
-      <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
-        <div class="mb-3 text-sm font-medium text-slate-700">
-          {{ t('tradingUnits.tradeDetail') }}
-        </div>
-        <el-table
-          :data="detailUnit.trading_snapshot?.trades || []"
-          size="small"
-          border
-          class="detail-trades-table"
-          :empty-text="t('tradingUnits.noTradeDetail')"
-        >
-          <el-table-column
-            prop="id"
-            :label="t('tradingUnits.tradeId')"
-            width="90"
-            align="center"
-            show-overflow-tooltip
-          />
-          <el-table-column
-            prop="data_name"
-            :label="t('tradingUnits.contract')"
-            min-width="130"
-            show-overflow-tooltip
-          />
-          <el-table-column
-            :label="t('tradingUnits.direction')"
-            width="90"
-            align="center"
-          >
-            <template #default="{ row }">
-              {{ directionLabel(row.direction) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            prop="size"
-            :label="t('tradingUnits.quantity')"
-            width="90"
-            align="right"
-          />
-          <el-table-column
-            :label="t('tradingUnits.tradePrice')"
-            width="110"
-            align="right"
-          >
-            <template #default="{ row }">
-              {{ formatPrice(row.price) }}
-            </template>
-          </el-table-column>
-          <!-- @vue-generic {TradingTrade} -->
-          <el-table-column
-            :label="t('tradingUnits.netPnL')"
-            width="110"
-            align="right"
-          >
-            <template #default="{ row }">
-              <span :class="numberClass(tradePnl(row))">
-                {{ formatSignedNumber(tradePnl(row), 2, false) }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column
-            :label="t('tradingUnits.commission')"
-            width="100"
-            align="right"
-          >
-            <template #default="{ row }">
-              {{ formatNumber(row.commission, 2, false) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            :label="t('tradingUnits.openTime')"
-            min-width="150"
-            show-overflow-tooltip
-          >
-            <template #default="{ row }">
-              {{ formatTradeTime(row.dtopen) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            :label="t('tradingUnits.closeTime')"
-            min-width="150"
-            show-overflow-tooltip
-          >
-            <template #default="{ row }">
-              {{ formatTradeTime(row.dtclose) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            :label="t('tradingUnits.holdingBars')"
-            width="100"
-            align="right"
-          >
-            <template #default="{ row }">
-              {{ formatNumber(row.barlen, 0, false) }}
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-    </div>
-  </el-dialog>
+    :snapshot="snapshotData"
+    :allow-open-directory="true"
+    :snapshot-labels="snapshotLabels"
+    :format-direction="formatDirection"
+    :format-trade-time="formatTradeTime"
+    @update:model-value="emit('update:visible', $event)"
+    @open-logs="detailUnit && emit('openRuntimeDialog', detailUnit)"
+    @open-runtime-dir="detailUnit && emit('openRuntimeDirectory', detailUnit)"
+  />
 </template>
 
 <script setup lang="ts">
-import {
-  directionLabel,
-  formatNumber,
-  formatPrice,
-  formatQuantity,
-  formatSignedNumber,
-  formatTime,
-  numberClass,
-  statusLabel,
-} from '@/composables/useUnitTableRendering'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { StrategyUnit, TradingTrade } from '@/types/workspace'
+import type { SnapshotUnitDetailData } from '@bt-api/workspace-ui/core'
+import { TradingUnitDetailDialog as SharedTradingUnitDetailDialog } from '@bt-api/workspace-ui/trading'
+import { useWorkspaceUiBridge } from '@/composables/useWorkspaceUiBridge'
+import { directionLabel, formatTime, statusLabel } from '@/composables/useUnitTableRendering'
+import type { StrategyUnit } from '@/types/workspace'
 
 const { t } = useI18n()
+useWorkspaceUiBridge()
 
-defineProps<{
+const props = defineProps<{
   visible: boolean
   detailUnit: StrategyUnit | null
 }>()
@@ -259,15 +37,74 @@ const emit = defineEmits<{
   (e: 'openRuntimeDirectory', unit: StrategyUnit): void
 }>()
 
-function formatTradeTime(value: string | null | undefined): string {
+const snapshotData = computed<SnapshotUnitDetailData | null>(() => {
+  const unit = props.detailUnit
+  if (!unit) return null
+  const snap = unit.trading_snapshot
+  return {
+    id: unit.id,
+    name: unit.strategy_name || unit.strategy_id || unit.id,
+    symbol: unit.symbol,
+    timeframe: unit.timeframe,
+    trading_mode: unit.trading_mode === 'live' ? t('tradingUnits.liveTrading') : t('tradingUnits.paperTrading'),
+    status_label: statusLabel(unit),
+    gateway_summary: snap?.gateway_summary,
+    instance_id: unit.trading_instance_id,
+    updated_at: snap?.updated_at || formatTime(unit.updated_at),
+    trading_day: snap?.trading_day,
+    long_position: snap?.long_position,
+    short_position: snap?.short_position,
+    today_pnl: snap?.today_pnl,
+    cumulative_pnl: snap?.cumulative_pnl,
+    leverage: snap?.leverage,
+    latest_price: snap?.latest_price,
+    started_at: snap?.started_at,
+    stopped_at: snap?.stopped_at,
+    error: snap?.error,
+    trades: (snap?.trades || []) as unknown as Array<Record<string, unknown>>,
+  }
+})
+
+const snapshotLabels = computed(() => ({
+  viewRunFile: t('tradingUnits.viewRunFile'),
+  openUnit: t('tradingUnits.openUnit'),
+  unit: t('tradingUnits.unit'),
+  tradingMode: t('tradingUnits.tradingMode'),
+  gateway: t('tradingUnits.gateway'),
+  instance: t('tradingUnits.instance'),
+  lastUpdate: t('tradingUnits.lastUpdate'),
+  tradingDay: t('tradingUnits.tradingDay'),
+  longShort: `${t('tradingUnits.longPosition')} / ${t('tradingUnits.flat')}`,
+  todayPnl: t('tradingUnits.todayPnL'),
+  cumPnl: t('tradingUnits.cumulativePnL'),
+  leveragePrice: `${t('tradingUnits.leverage')} / ${t('tradingUnits.latestPrice')}`,
+  runInfo: t('tradingUnits.runInfo'),
+  runStarted: t('tradingUnits.runStarted'),
+  runStopped: t('tradingUnits.runStopped'),
+  errorInfo: t('tradingUnits.errorInfo'),
+  tradeDetail: t('tradingUnits.tradeDetail'),
+  noTradeDetail: t('tradingUnits.noTradeDetail'),
+  colTradeId: t('tradingUnits.tradeId'),
+  colContract: t('tradingUnits.contract'),
+  colDirection: t('tradingUnits.direction'),
+  colQty: t('tradingUnits.quantity'),
+  colPrice: t('tradingUnits.tradePrice'),
+  colNetPnl: t('tradingUnits.netPnL'),
+  colCommission: t('tradingUnits.commission'),
+  colOpenTime: t('tradingUnits.openTime'),
+  colCloseTime: t('tradingUnits.closeTime'),
+  colHoldingBars: t('tradingUnits.holdingBars'),
+}))
+
+function formatDirection(value: unknown): string {
+  return directionLabel(typeof value === 'string' ? value : null)
+}
+
+function formatTradeTime(value: unknown): string {
   const text = String(value ?? '').trim()
   if (!text) return '-'
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text
   const date = new Date(text.replace(' ', 'T'))
   return Number.isNaN(date.getTime()) ? text : date.toLocaleString('zh-CN')
-}
-
-function tradePnl(row: TradingTrade): number | null {
-  return row.pnlcomm ?? row.pnl ?? null
 }
 </script>

@@ -1,62 +1,27 @@
 <template>
-  <el-dialog
+  <SharedCreateWorkspaceDialog
     :model-value="modelValue"
+    :workspace="mappedWorkspace"
+    :workspace-type="targetWorkspaceType"
     :title="dialogTitle"
-    width="480px"
-    @update:model-value="$emit('update:modelValue', $event)"
-    @closed="resetForm"
-  >
-    <el-form
-      ref="formRef"
-      :model="form"
-      :rules="rules"
-      label-width="80px"
-    >
-      <el-form-item
-        :label="t('workspace.nameLabel')"
-        prop="name"
-      >
-        <el-input
-          v-model="form.name"
-          :placeholder="t('workspace.namePlaceholder')"
-          maxlength="200"
-          show-word-limit
-        />
-      </el-form-item>
-      <el-form-item
-        :label="t('workspace.descLabel')"
-        prop="description"
-      >
-        <el-input
-          v-model="form.description"
-          type="textarea"
-          :placeholder="t('workspace.descPlaceholder')"
-          maxlength="500"
-          show-word-limit
-          :rows="3"
-        />
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">
-        {{ t('workspace.cancel') }}
-      </el-button>
-      <el-button
-        type="primary"
-        :loading="submitting"
-        @click="handleSubmit"
-      >
-        {{ isEdit ? t('workspace.save') : t('workspace.create') }}
-      </el-button>
-    </template>
-  </el-dialog>
+    :max-name-length="200"
+    :max-desc-length="500"
+    :on-save="handleSave"
+    @update:model-value="emit('update:modelValue', $event)"
+    @saved="emit('saved')"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import type { FormInstance, FormRules } from 'element-plus'
+import {
+  CreateWorkspaceDialog as SharedCreateWorkspaceDialog,
+  type CreateWorkspacePayload,
+  type WorkspaceSummaryItem,
+} from '@bt-api/workspace-ui/core'
+import { useWorkspaceUiBridge } from '@/composables/useWorkspaceUiBridge'
 import { getErrorMessage } from '@/api/index'
 import { useWorkspaceStore } from '@/stores/workspace'
 import type { Workspace, WorkspaceType } from '@/types/workspace'
@@ -73,68 +38,52 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+useWorkspaceUiBridge()
+
 const store = useWorkspaceStore()
-const formRef = ref<FormInstance>()
-const submitting = ref(false)
 
-const form = ref({
-  name: '',
-  description: '',
-})
-
-const isEdit = computed(() => !!props.workspace)
+const isEdit = computed(() => Boolean(props.workspace))
 const targetWorkspaceType = computed<WorkspaceType>(() =>
-  props.workspace?.workspace_type ?? props.workspaceType ?? 'research'
+  props.workspace?.workspace_type ?? props.workspaceType ?? 'research',
 )
 const dialogTitle = computed(() => {
-  const label = targetWorkspaceType.value === 'trading' ? t('workspace.tradingWorkspaceLabel') : t('workspace.workspaceLabelType')
+  const label = targetWorkspaceType.value === 'trading'
+    ? t('workspace.tradingWorkspaceLabel')
+    : t('workspace.workspaceLabelType')
   return isEdit.value ? `${t('workspace.editPrefix')}${label}` : `${t('workspace.newPrefix')}${label}`
 })
 
-const rules: FormRules = {
-  name: [
-    { required: true, message: t('workspace.nameRequired'), trigger: 'blur' },
-    { max: 200, message: t('workspace.nameTooLong'), trigger: 'blur' },
-  ],
-}
-
-watch(() => props.workspace, (workspace) => {
-  if (workspace) {
-    form.value.name = workspace.name
-    form.value.description = workspace.description || ''
+const mappedWorkspace = computed<WorkspaceSummaryItem | null>(() => {
+  if (!props.workspace) return null
+  return {
+    id: props.workspace.id,
+    name: props.workspace.name,
+    description: props.workspace.description,
+    workspace_type: props.workspace.workspace_type,
+    total_units: props.workspace.unit_count,
   }
-}, { immediate: true })
+})
 
-function resetForm() {
-  form.value = { name: '', description: '' }
-  formRef.value?.resetFields()
-}
-
-async function handleSubmit() {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  submitting.value = true
+async function handleSave(payload: CreateWorkspacePayload): Promise<void> {
   try {
     if (isEdit.value && props.workspace) {
       await store.updateWorkspace(props.workspace.id, {
-        name: form.value.name,
-        description: form.value.description || undefined,
+        name: payload.name,
+        description: payload.description || undefined,
       })
       ElMessage.success(t('workspace.saveSuccess'))
     } else {
       await store.createWorkspace({
-        name: form.value.name,
-        description: form.value.description || undefined,
+        name: payload.name,
+        description: payload.description || undefined,
         workspace_type: targetWorkspaceType.value,
       })
       ElMessage.success(t('workspace.createSuccess'))
     }
-    emit('saved')
   } catch (error: unknown) {
-    ElMessage.error(getErrorMessage(error, t('workspace.saveError')))
-  } finally {
-    submitting.value = false
+    const message = getErrorMessage(error, t('workspace.saveError'))
+    ElMessage.error(message)
+    throw new Error(message)
   }
 }
 </script>

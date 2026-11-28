@@ -1,166 +1,31 @@
 <template>
-  <el-dialog
+  <SharedUnitRuntimeLogsDialog
     :model-value="modelValue"
+    mode="files"
     :title="t('workspaceDialogs.urdTitle')"
-    width="1120px"
-    @close="emit('update:modelValue', false)"
-  >
-    <div
-      v-if="unit"
-      class="space-y-4"
-    >
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('workspaceDialogs.urdStrategyUnit') }}
-          </div>
-          <div class="mt-1 font-semibold text-slate-700">
-            {{ unit.strategy_name || unit.strategy_id }}
-          </div>
-          <div class="text-xs text-slate-400">
-            {{ unit.symbol }} / {{ unit.timeframe }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('workspaceDialogs.urdInstanceStatus') }}
-          </div>
-          <div class="mt-1 font-semibold text-slate-700">
-            {{ unit.trading_snapshot?.instance_status || unit.run_status }}
-          </div>
-          <div class="text-xs text-slate-400">
-            {{ unit.trading_instance_id || t('workspaceDialogs.urdNoInstance') }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('workspaceDialogs.urdLogDir') }}
-          </div>
-          <div class="mt-1 break-all font-mono text-xs text-slate-700">
-            {{ runtimeInfo?.log_dir || '-' }}
-          </div>
-        </div>
-      </div>
-
-      <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <div class="text-sm font-medium text-slate-700">
-              {{ t('workspaceDialogs.urdRuntimeDir') }}
-            </div>
-            <div class="font-mono text-xs text-slate-500">
-              {{ runtimeInfo?.runtime_dir || '-' }}
-            </div>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <el-select
-              v-model="selectedFile"
-              class="w-72"
-              :placeholder="t('workspaceDialogs.urdSelectFile')"
-              :loading="loadingInfo"
-              @change="loadSelectedFile"
-            >
-              <el-option
-                v-for="file in runtimeInfo?.files || []"
-                :key="file.relative_path"
-                :label="fileLabel(file)"
-                :value="file.relative_path"
-              />
-            </el-select>
-            <el-select
-              v-model="tailLines"
-              class="w-28"
-              @change="loadSelectedFile"
-            >
-              <el-option
-                :label="t('workspaceDialogs.urdAll')"
-                :value="0"
-              />
-              <el-option
-                :label="t('workspaceDialogs.urdLines200')"
-                :value="200"
-              />
-              <el-option
-                :label="t('workspaceDialogs.urdLines500')"
-                :value="500"
-              />
-              <el-option
-                :label="t('workspaceDialogs.urdLines1000')"
-                :value="1000"
-              />
-            </el-select>
-            <el-button
-              :loading="loadingInfo || loadingContent"
-              @click="refreshAll"
-            >
-              {{ t('workspaceDialogs.urdRefresh') }}
-            </el-button>
-            <el-button
-              type="primary"
-              :loading="openingDir"
-              @click="openRuntimeDir"
-            >
-              {{ t('workspaceDialogs.urdOpenUnit') }}
-            </el-button>
-          </div>
-        </div>
-
-        <div class="mb-3 flex flex-wrap gap-2">
-          <el-tag
-            v-for="file in runtimeInfo?.files || []"
-            :key="file.relative_path"
-            :type="selectedFile === file.relative_path ? 'primary' : 'info'"
-            effect="plain"
-            class="cursor-pointer"
-            @click="selectFile(file.relative_path)"
-          >
-            {{ file.relative_path }}
-          </el-tag>
-        </div>
-
-        <div class="rounded-lg border border-slate-200 bg-slate-950 text-slate-100">
-          <div class="border-b border-slate-800 px-4 py-2 font-mono text-xs text-slate-400">
-            {{ selectedFile || t('workspaceDialogs.urdNoFileSelected') }}
-          </div>
-          <div class="unit-runtime-dialog__content">
-            <div
-              v-if="loadingContent"
-              class="px-4 py-6 text-center text-sm text-slate-400"
-            >
-              {{ t('workspaceDialogs.urdLoading') }}
-            </div>
-            <div
-              v-else-if="contentError"
-              class="px-4 py-6 text-sm text-rose-300"
-            >
-              {{ contentError }}
-            </div>
-            <div
-              v-else-if="!selectedFile"
-              class="px-4 py-6 text-sm text-slate-400"
-            >
-              {{ t('workspaceDialogs.urdSelectFilePrompt') }}
-            </div>
-            <pre
-              v-else
-              class="m-0 whitespace-pre-wrap break-words px-4 py-4 font-mono text-xs leading-6"
-            >{{ fileContent }}</pre>
-          </div>
-        </div>
-      </div>
-    </div>
-  </el-dialog>
+    :unit-header="unitHeader"
+    :allow-open-directory="true"
+    :files-labels="filesLabels"
+    :load-runtime-info="handleLoadRuntimeInfo"
+    :load-runtime-file="handleLoadRuntimeFile"
+    :on-open-directory="handleOpenDirectory"
+    @update:model-value="emit('update:modelValue', $event)"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import type { UnitRuntimeFilesData } from '@bt-api/workspace-ui/core'
+import { UnitRuntimeLogsDialog as SharedUnitRuntimeLogsDialog } from '@bt-api/workspace-ui/trading'
+import { useWorkspaceUiBridge } from '@/composables/useWorkspaceUiBridge'
 import { getErrorMessage } from '@/api/index'
 import { workspaceApi } from '@/api/workspace'
-import type { StrategyUnit, StrategyUnitRuntimeFile, StrategyUnitRuntimeInfo } from '@/types/workspace'
+import type { StrategyUnit } from '@/types/workspace'
 
 const { t } = useI18n()
+useWorkspaceUiBridge()
 
 const props = defineProps<{
   modelValue: boolean
@@ -172,136 +37,59 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const runtimeInfo = ref<StrategyUnitRuntimeInfo | null>(null)
-const selectedFile = ref('')
-const fileContent = ref('')
-const contentError = ref('')
-const tailLines = ref<number>(500)
-const loadingInfo = ref(false)
-const loadingContent = ref(false)
-const openingDir = ref(false)
-
-watch(
-  () => [props.modelValue, props.unit?.id] as const,
-  ([visible, unitId]) => {
-    if (!visible || !unitId) {
-      if (!visible) {
-        runtimeInfo.value = null
-        selectedFile.value = ''
-        fileContent.value = ''
-        contentError.value = ''
-      }
-      return
-    }
-    void loadRuntimeInfo()
-  },
-  { immediate: true },
-)
-
-function pickDefaultFile(files: StrategyUnitRuntimeFile[]): string {
-  const preferred = [
-    'logs/error.log',
-    'logs/system.log',
-    'logs/monitor.log',
-    'logs/signal.log',
-    'config.yaml',
-    'run.py',
-  ]
-  for (const path of preferred) {
-    if (files.some(file => file.relative_path === path)) {
-      return path
-    }
+const unitHeader = computed(() => {
+  if (!props.unit) return null
+  return {
+    id: props.unit.id,
+    name: props.unit.strategy_name || props.unit.strategy_id || props.unit.id,
+    subtitle: `${props.unit.symbol} / ${props.unit.timeframe}`,
+    statusText: props.unit.trading_snapshot?.instance_status || props.unit.run_status,
+    instanceId: props.unit.trading_instance_id,
+    noInstanceText: t('workspaceDialogs.urdNoInstance'),
   }
-  return files[0]?.relative_path || ''
-}
+})
 
-function fileLabel(file: StrategyUnitRuntimeFile): string {
-  return `${file.relative_path} (${formatSize(file.size)})`
-}
+const filesLabels = computed(() => ({
+  strategyUnit: t('workspaceDialogs.urdStrategyUnit'),
+  instanceStatus: t('workspaceDialogs.urdInstanceStatus'),
+  logDir: t('workspaceDialogs.urdLogDir'),
+  runtimeDir: t('workspaceDialogs.urdRuntimeDir'),
+  selectFile: t('workspaceDialogs.urdSelectFile'),
+  allLines: t('workspaceDialogs.urdAll'),
+  lines200: t('workspaceDialogs.urdLines200'),
+  lines500: t('workspaceDialogs.urdLines500'),
+  lines1000: t('workspaceDialogs.urdLines1000'),
+  refresh: t('workspaceDialogs.urdRefresh'),
+  openUnit: t('workspaceDialogs.urdOpenUnit'),
+  noFileSelected: t('workspaceDialogs.urdNoFileSelected'),
+  selectFilePrompt: t('workspaceDialogs.urdSelectFilePrompt'),
+}))
 
-function formatSize(size: number): string {
-  if (size >= 1024 * 1024) {
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`
-  }
-  if (size >= 1024) {
-    return `${(size / 1024).toFixed(1)} KB`
-  }
-  return `${size} B`
-}
-
-function selectFile(relativePath: string) {
-  selectedFile.value = relativePath
-  void loadSelectedFile()
-}
-
-async function loadRuntimeInfo() {
-  if (!props.unit) return
-  loadingInfo.value = true
-  contentError.value = ''
+async function handleLoadRuntimeInfo(): Promise<UnitRuntimeFilesData> {
+  if (!props.unit) return { files: [] }
   try {
-    const info = await workspaceApi.getUnitRuntimeInfo(props.workspaceId, props.unit.id)
-    runtimeInfo.value = info
-    const nextFile = info.files.some(file => file.relative_path === selectedFile.value)
-      ? selectedFile.value
-      : pickDefaultFile(info.files)
-    selectedFile.value = nextFile
-    if (nextFile) {
-      await loadSelectedFile()
-    } else {
-      fileContent.value = ''
-    }
+    return await workspaceApi.getUnitRuntimeInfo(props.workspaceId, props.unit.id)
   } catch (error: unknown) {
-    runtimeInfo.value = null
-    fileContent.value = ''
-    contentError.value = getErrorMessage(error, t('workspaceDialogs.urdLoadInfoFailed'))
-  } finally {
-    loadingInfo.value = false
+    throw new Error(getErrorMessage(error, t('workspaceDialogs.urdLoadInfoFailed')))
   }
 }
 
-async function loadSelectedFile() {
-  if (!props.unit || !selectedFile.value) {
-    fileContent.value = ''
-    return
-  }
-  loadingContent.value = true
-  contentError.value = ''
+async function handleLoadRuntimeFile(relativePath: string, tailLines: number | null): Promise<string> {
+  if (!props.unit) return ''
   try {
-    fileContent.value = await workspaceApi.getUnitRuntimeFile(
-      props.workspaceId,
-      props.unit.id,
-      selectedFile.value,
-      tailLines.value || null,
-    )
+    return await workspaceApi.getUnitRuntimeFile(props.workspaceId, props.unit.id, relativePath, tailLines)
   } catch (error: unknown) {
-    fileContent.value = ''
-    contentError.value = getErrorMessage(error, t('workspaceDialogs.urdReadFileFailed'))
-  } finally {
-    loadingContent.value = false
+    throw new Error(getErrorMessage(error, t('workspaceDialogs.urdReadFileFailed')))
   }
 }
 
-async function openRuntimeDir() {
+async function handleOpenDirectory(): Promise<void> {
   if (!props.unit) return
-  openingDir.value = true
   try {
     const result = await workspaceApi.openUnitRuntimeDir(props.workspaceId, props.unit.id)
     ElMessage.success(result.message || t('workspaceDialogs.urdDirOpened'))
   } catch (error: unknown) {
     ElMessage.error(getErrorMessage(error, t('workspaceDialogs.urdOpenDirFailed')))
-  } finally {
-    openingDir.value = false
   }
 }
-
-function refreshAll() {
-  void loadRuntimeInfo()
-}
 </script>
-
-<style scoped>
-.unit-runtime-dialog__content {
-  max-height: 520px;
-  overflow: auto;
-}
-</style>
